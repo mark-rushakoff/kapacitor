@@ -1,0 +1,35 @@
+
+var downServers = batch
+  |query('''
+    SELECT last(uptime) AS last_uptime
+    FROM "telegraf"."default"."system"
+  ''')
+    .period(52w)
+    .every(20s)
+    .groupBy('host')
+  |log()
+    .level('DEBUG')
+    .prefix('DOWN')
+
+var currentServers = batch
+  | query('''
+    SELECT last(uptime) AS last_uptime
+    FROM "telegraf"."default"."system"
+  ''')
+    .period(40s)
+    .every(20s)
+    .groupBy('host')
+  |log()
+    .level('DEBUG')
+    .prefix('CURRENT')
+
+downServers
+  |join(currentServers)
+    .as('down', 'current')
+    .tolerance(52w)
+    .on('host')
+    .fill(0)
+    .streamName('allServers')
+  |log()
+    .level('DEBUG')
+    .prefix('JOIN')

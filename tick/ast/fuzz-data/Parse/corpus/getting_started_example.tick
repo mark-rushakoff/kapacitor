@@ -1,0 +1,39 @@
+stream
+    |from()
+        .measurement('cpu')
+    // create a new field called 'used' which inverts the idle cpu.
+    |eval(lambda: 100.0 - "usage_idle")
+        .as('used')
+    |groupBy('service', 'datacenter')
+    |window()
+        .period(1m)
+        .every(1m)
+    // calculate the 95th percentile of the used cpu.
+    |percentile('used', 95.0)
+    |eval(lambda: sigma("percentile"))
+        .as('sigma')
+        .keep('percentile', 'sigma')
+    |alert()
+        .id('{{ .Name }}/{{ index .Tags "service" }}/{{ index .Tags "datacenter"}}')
+        .message('{{ .ID }} is {{ .Level }} cpu-95th:{{ index .Fields "percentile" }}')
+        // Compare values to running mean and standard deviation
+        .warn(lambda: "sigma" > 2.5)
+        .crit(lambda: "sigma" > 3.0)
+        .log('/tmp/alerts.log')
+
+        // Post data to custom endpoint
+        .post('https://alerthandler.example.com')
+
+        // Execute custom alert handler script
+        .exec('/bin/custom_alert_handler.sh')
+
+        // Send alerts to slack
+        .slack()
+        .channel('#alerts')
+
+        // Sends alerts to PagerDuty
+        .pagerDuty()
+
+        // Send alerts to VictorOps
+        .victorOps()
+        .routingKey('team_rocket')
